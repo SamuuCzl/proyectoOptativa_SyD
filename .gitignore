@@ -1,16 +1,18 @@
-# Compiled class file
+# Archivos compilados
 *.class
+target/
+out/
 
-# Log file
+# Archivos de IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Archivos de registro
 *.log
 
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
+# Archivos comprimidos
 *.jar
 *.war
 *.nar
@@ -19,6 +21,18 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# Archivos de errores de Java
 hs_err_pid*
 replay_pid*
+
+# Archivos con claves y contraseñas
+.env
+application-local.properties
+application-secret.properties
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Permitimos el Maven Wrapper
+!**/.mvn/wrapper/maven-wrapper.jar
