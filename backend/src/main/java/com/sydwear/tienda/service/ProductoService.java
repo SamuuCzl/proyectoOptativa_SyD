@@ -7,6 +7,9 @@ import com.sydwear.tienda.exception.conflictoException;
 import com.sydwear.tienda.exception.noEncontradoException;
 import com.sydwear.tienda.exception.peticionIncorrectaException;
 
+import java.text.Normalizer;
+import java.util.Locale;
+
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -294,4 +297,237 @@ public class ProductoService {
             return detalleDto(producto);
         }
     }
+
+    // Quitamos las tildes y pasamos el texto a minusculas
+    private String normalizar(String texto) {
+
+        if (texto == null) {
+            return "";
+        }
+
+        texto = Normalizer.normalize(texto, Normalizer.Form.NFD);
+        texto = texto.replaceAll("\\p{M}", "");
+
+        return texto.toLowerCase(Locale.ROOT);
+    }
+
+    // Comprobamos que los filtros introducidos sean correctos
+    private void validarFiltros(ProductoFiltroDto filtro) {
+
+        if (filtro.getPrecioMin() != null &&
+                filtro.getPrecioMin().compareTo(BigDecimal.ZERO) < 0) {
+
+            throw new peticionIncorrectaException("Precio minimo incorrecto");
+        }
+
+        if (filtro.getPrecioMax() != null &&
+                filtro.getPrecioMax().compareTo(BigDecimal.ZERO) < 0) {
+
+            throw new peticionIncorrectaException("Precio maximo incorrecto");
+        }
+
+        if (filtro.getPrecioMin() != null && filtro.getPrecioMax() != null) {
+
+            if (filtro.getPrecioMin().compareTo(filtro.getPrecioMax()) > 0) {
+
+                throw new peticionIncorrectaException("El precio minimo supera al maximo");
+            }
+        }
+
+        if (!"NOMBRE".equals(filtro.getOrden()) &&
+                !"PRECIO".equals(filtro.getOrden()) &&
+                !"NOVEDAD".equals(filtro.getOrden())) {
+
+            throw new peticionIncorrectaException("Orden incorrecto");
+        }
+
+        if (!"ASC".equals(filtro.getDireccion()) &&
+                !"DESC".equals(filtro.getDireccion())) {
+
+            throw new peticionIncorrectaException("Direccion incorrecta");
+        }
+    }
+
+    // Buscamos los productos que cumplen los filtros
+    public List<ProductoResumenDto> listar(ProductoFiltroDto filtro) {
+
+        synchronized (datos) {
+
+            validarFiltros(filtro);
+
+            List<Producto> productosEncontrados = new ArrayList<>();
+
+            for (Producto producto : datos.getProductos()) {
+
+                // No mostramos los productos retirados
+                if (!producto.getActivo()) {
+                    continue;
+                }
+
+                // Buscamos por categoria
+                if (filtro.getCategoriaId() != null &&
+                        !producto.getCategoria().getId().equals(filtro.getCategoriaId())) {
+                    continue;
+                }
+
+                // Buscamos por nombre
+                if (filtro.getQ() != null &&
+                        !normalizar(producto.getNombre()).contains(normalizar(filtro.getQ()))) {
+                    continue;
+                }
+
+                // Comprobamos el precio minimo
+                if (filtro.getPrecioMin() != null &&
+                        producto.getPrecio().compareTo(filtro.getPrecioMin()) < 0) {
+                    continue;
+                }
+
+                // Comprobamos el precio maximo
+                if (filtro.getPrecioMax() != null &&
+                        producto.getPrecio().compareTo(filtro.getPrecioMax()) > 0) {
+                    continue;
+                }
+
+                // Comprobamos si tiene stock
+                if (Boolean.TRUE.equals(filtro.getSoloDisponibles()) &&
+                        producto.getStock() == 0) {
+                    continue;
+                }
+
+                // Buscamos por talla
+                if (filtro.getTalla() != null &&
+                        !normalizar(producto.getTalla()).equals(normalizar(filtro.getTalla()))) {
+                    continue;
+                }
+
+                // Buscamos por color
+                if (filtro.getColor() != null &&
+                        !normalizar(producto.getColor()).equals(normalizar(filtro.getColor()))) {
+                    continue;
+                }
+
+                productosEncontrados.add(producto);
+            }
+
+            // Ordenamos los productos encontrados
+            ordenar(productosEncontrados, filtro.getOrden(), filtro.getDireccion());
+
+            List<ProductoResumenDto> lista = new ArrayList<>();
+
+            for (Producto producto : productosEncontrados) {
+                lista.add(resumen(producto));
+            }
+
+            return lista;
+        }
+    }
+
+    // Ordenamos los productos segun lo que haya elegido el usuario
+    private void ordenar(List<Producto> productos, String orden, String direccion) {
+
+        for (int i = 0; i < productos.size(); i++) {
+
+            for (int j = i + 1; j < productos.size(); j++) {
+
+                Producto primero = productos.get(i);
+                Producto segundo = productos.get(j);
+
+                int resultado = 0;
+
+                switch (orden) {
+
+                    case "NOMBRE":
+                        resultado = normalizar(primero.getNombre())
+                                .compareTo(normalizar(segundo.getNombre()));
+                        break;
+
+                    case "PRECIO":
+                        resultado = primero.getPrecio()
+                                .compareTo(segundo.getPrecio());
+                        break;
+
+                    case "NOVEDAD":
+                        resultado = primero.getFechaAlta()
+                                .compareTo(segundo.getFechaAlta());
+                        break;
+                }
+
+                // Cambiamos el orden de los productos si es necesario
+                if ((direccion.equals("ASC") && resultado > 0) ||
+                        (direccion.equals("DESC") && resultado < 0)) {
+
+                    productos.set(i, segundo);
+                    productos.set(j, primero);
+                }
+            }
+        }
+    }
+
+    // Mostramos los productos de una categoria
+    public List<ProductoResumenDto> productosCategoria(Long id) {
+
+        synchronized (datos) {
+
+            boolean encontrada = false;
+
+            for (Categoria categoria : datos.getCategorias()) {
+
+                if (categoria.getId().equals(id)) {
+                    encontrada = true;
+                    break;
+                }
+            }
+
+            if (!encontrada) {
+                throw new noEncontradoException("Categoria no encontrada");
+            }
+
+            ProductoFiltroDto filtro = new ProductoFiltroDto();
+
+            filtro.setCategoriaId(id);
+
+            return listar(filtro);
+        }
+    }
+
+    // Buscamos un producto por su SKU
+    public ProductoDetalleDto buscarSku(String sku) {
+
+        synchronized (datos) {
+
+            for (Producto producto : datos.getProductos()) {
+
+                if (producto.getSku().equalsIgnoreCase(sku) &&
+                        producto.getActivo()) {
+
+                    return detalleDto(producto);
+                }
+            }
+
+            throw new noEncontradoException("Producto no encontrado");
+        }
+    }
+
+    // Mostramos los productos que tienen poco stock
+    public List<ProductoResumenDto> stockBajo(int umbral) {
+
+        synchronized (datos) {
+
+            if (umbral < 0) {
+                throw new peticionIncorrectaException("Umbral incorrecto");
+            }
+
+            List<ProductoResumenDto> lista = new ArrayList<>();
+
+            for (Producto producto : datos.getProductos()) {
+
+                if (producto.getStock() < umbral) {
+                    lista.add(resumen(producto));
+                }
+            }
+
+            return lista;
+        }
+    }
+
 }
