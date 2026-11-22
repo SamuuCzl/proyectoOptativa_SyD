@@ -37,17 +37,16 @@ public class CarritoController {
                 .getName();
     }
 
-    // Preparamos los datos del carrito para devolverlos
+    // Preparamos todos los datos del carrito
     private CarritoDto dto(Carrito carrito) {
 
         List<LineaCarritoDto> lineas = new ArrayList<>();
-        BigDecimal total = BigDecimal.ZERO;
 
         for (LineaCarrito linea : carrito.getLineas()) {
 
             BigDecimal precio = linea.getProducto().getPrecio();
 
-            BigDecimal subtotal = precio.multiply(
+            BigDecimal subtotalLinea = precio.multiply(
                     BigDecimal.valueOf(linea.getCantidad())
             );
 
@@ -56,13 +55,31 @@ public class CarritoController {
                     linea.getProducto().getNombre(),
                     linea.getCantidad(),
                     precio,
-                    subtotal
+                    subtotalLinea
             ));
-
-            total = total.add(subtotal);
         }
 
-        return new CarritoDto(lineas, total);
+        String email = carrito.getUsuario().getEmail();
+
+        BigDecimal subtotal = servicio.total(email);
+        BigDecimal gastosEnvio = servicio.gastosEnvio(email);
+        BigDecimal total = subtotal.add(gastosEnvio);
+
+        int numeroArticulos = servicio.numeroArticulos(email);
+
+        BigDecimal faltaEnvioGratis = servicio.faltaEnvioGratis(email);
+
+        List<String> avisos = servicio.avisos(email);
+
+        return new CarritoDto(
+                lineas,
+                numeroArticulos,
+                subtotal,
+                gastosEnvio,
+                total,
+                faltaEnvioGratis,
+                avisos
+        );
     }
 
     // Mostramos nuestro carrito
