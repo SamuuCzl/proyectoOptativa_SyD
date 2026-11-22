@@ -42,6 +42,11 @@
 			<artifactId>spring-security-crypto</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+
 		<!-- Librerias para crear y comprobar tokens JWT -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
