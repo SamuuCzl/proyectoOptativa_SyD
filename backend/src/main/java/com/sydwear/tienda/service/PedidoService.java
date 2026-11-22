@@ -71,33 +71,56 @@ public class PedidoService {
                     HttpStatus.BAD_REQUEST, "El carrito esta vacio");
         }
 
+        // Comprobamos que tiene direccion de envio
         if (usuario.getDireccionEnvio() == null ||
                 usuario.getDireccionEnvio().isBlank()) {
+
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "Falta la direccion de envio");
         }
 
-        // Comprobamos el stock antes de comprar
+        // Revisamos si hay problemas con los productos
+        List<String> avisos = carritoService.avisos(email);
+
+        if (!avisos.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    String.join(", ", avisos));
+        }
+
+        // Comprobamos todas las cantidades antes de comprar
         for (LineaCarrito linea : carrito.getLineas()) {
 
-            if (linea.getCantidad() <= 0 ||
-                    linea.getCantidad() > linea.getProducto().getStock()) {
-
+            if (linea.getCantidad() <= 0) {
                 throw new ResponseStatusException(
-                        HttpStatus.CONFLICT, "No hay suficiente stock");
+                        HttpStatus.BAD_REQUEST, "Cantidad incorrecta");
+            }
+
+            if (!linea.getProducto().getActivo()) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Producto retirado: " +
+                                linea.getProducto().getNombre());
+            }
+
+            if (linea.getCantidad() > linea.getProducto().getStock()) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Stock insuficiente: " +
+                                linea.getProducto().getNombre());
             }
         }
 
         List<LineaPedido> lineasPedido = new ArrayList<>();
-        BigDecimal subtotal = BigDecimal.ZERO;
 
-        // Guardamos los productos y sus precios
+        // Guardamos los productos con el precio del momento
         for (LineaCarrito linea : carrito.getLineas()) {
 
             Producto producto = linea.getProducto();
             int cantidad = linea.getCantidad();
 
             BigDecimal precio = producto.getPrecio();
+
             BigDecimal totalLinea = precio.multiply(
                     BigDecimal.valueOf(cantidad)
             );
@@ -111,11 +134,11 @@ public class PedidoService {
             );
 
             lineasPedido.add(lineaPedido);
-            subtotal = subtotal.add(totalLinea);
         }
 
-        // De momento no aplicamos gastos de envio
-        BigDecimal gastosEnvio = BigDecimal.ZERO;
+        // Calculamos los importes igual que en el carrito
+        BigDecimal subtotal = carritoService.total(email);
+        BigDecimal gastosEnvio = carritoService.gastosEnvio(email);
         BigDecimal total = subtotal.add(gastosEnvio);
 
         Long id = siguientePedido++;
@@ -133,7 +156,7 @@ public class PedidoService {
                 lineasPedido
         );
 
-        // Descontamos las unidades que se han comprado
+        // Descontamos las unidades compradas
         for (LineaCarrito linea : carrito.getLineas()) {
 
             Producto producto = linea.getProducto();
@@ -145,7 +168,7 @@ public class PedidoService {
 
         pedidos.add(pedido);
 
-        // Dejamos el carrito vacio despues de comprar
+        // Vaciamos el carrito despues de comprar
         carritoService.vaciar(email);
 
         return pedido;
@@ -157,6 +180,7 @@ public class PedidoService {
         List<Pedido> resultado = new ArrayList<>();
 
         for (Pedido pedido : pedidos) {
+
             if (pedido.getUsuario().getEmail().equalsIgnoreCase(email)) {
                 resultado.add(pedido);
             }
@@ -172,10 +196,20 @@ public class PedidoService {
 
         if (!pedido.getUsuario().getEmail().equalsIgnoreCase(email)) {
             throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN, "No puedes consultar este pedido");
+                    HttpStatus.NOT_FOUND, "Pedido no encontrado");
         }
 
         return pedido;
+    }
+
+    // El cliente cancela uno de sus pedidos
+    public Pedido cancelarMiPedido(String email, Long id) {
+
+        // Primero comprobamos que el pedido es suyo
+        Pedido pedido = miPedido(email, id);
+
+        // Utilizamos el mismo cambio de estado que el administrador
+        return cambiarEstado(pedido.getId(), EstadoPedido.CANCELADO);
     }
 
     // Devolvemos todos los pedidos al administrador
@@ -197,7 +231,8 @@ public class PedidoService {
                 !pedido.getEstado().puedeCambiarA(nuevoEstado)) {
 
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "Cambio de estado no permitido");
+                    HttpStatus.CONFLICT,
+                    "Cambio de estado no permitido");
         }
 
         // Si cancelamos, devolvemos el stock al catalogo

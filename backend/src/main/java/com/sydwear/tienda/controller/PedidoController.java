@@ -97,6 +97,13 @@ public class PedidoController {
         return dto(servicio.miPedido(emailUsuario(), id));
     }
 
+    // Cancelamos uno de nuestros pedidos
+    @PutMapping("/api/pedidos/{id}/cancelar")
+    public PedidoDto cancelarMiPedido(@PathVariable Long id) {
+
+        return dto(servicio.cancelarMiPedido(emailUsuario(), id));
+    }
+
     // El administrador consulta todos los pedidos
     @GetMapping("/api/admin/pedidos")
     public List<PedidoDto> listarAdmin() {
