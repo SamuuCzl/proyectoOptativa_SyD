@@ -4,6 +4,7 @@ package com.sydwear.tienda.service;
 import com.sydwear.tienda.model.Categoria;
 import com.sydwear.tienda.model.Producto;
 import com.sydwear.tienda.model.Usuario;
+import com.sydwear.tienda.model.Rol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.time.LocalDateTime;
 import java.math.BigDecimal;
 
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 @Service
 public class CatalogoDatosService {
@@ -92,6 +94,27 @@ public class CatalogoDatosService {
                 "Pantalón de bolsillos laterales", "39.90", 12,
                 "https://upload.wikimedia.org/wikipedia/commons/c/cd/Cargo_pants_001.jpg",
                 false, false, 3, "L", "Verde");
+
+        // Creamos un administrador para hacer las pruebas
+        String passwordAdmin = System.getenv("SYD_ADMIN_PASSWORD");
+
+        if (passwordAdmin != null && !passwordAdmin.isBlank()) {
+
+            BCryptPasswordEncoder codificador =
+                    new BCryptPasswordEncoder();
+
+            Usuario administrador = new Usuario(
+                    nuevoUsuario(),
+                    "admin@sydwear.local",
+                    "Administrador",
+                    "",
+                    Rol.ADMIN,
+                    LocalDateTime.now(),
+                    codificador.encode(passwordAdmin)
+            );
+
+            usuarios.add(administrador);
+        }
     }
 
     // Creamos el producto y lo añadimos a la lista
